@@ -31,7 +31,9 @@
                     nodes.Add(Node.GetNode(ln, nodes));
                 }
             }
-
+            foreach(Node node in nodes){
+                node.SetDistances(nodes);
+            }
             Console.WriteLine("We did it!!");
         }
         
