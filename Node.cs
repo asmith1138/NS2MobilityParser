@@ -6,8 +6,9 @@ namespace Parser
         public double Time { get; set; }
         public Point? Position{get;set;}
         public bool Start { get; set; }
-        public List<NodeDistance> Distances { get; set; }
-
+        public List<Signature> Signatures { get; set; }
+        public List<int> NodesInSight { get; set; }
+        
         public static Node GetNode(string[] line, List<Node> nodes) =>
                         line switch
                         {
@@ -17,14 +18,6 @@ namespace Parser
                             [_, var id, _, "Z_", var z] => nodes.Where(n => n.NodeId == int.Parse(id) && n.Time == -1).Select(n => { n.Position.Z = double.Parse(z); return n; }).First(),
                             _ => throw new NotImplementedException(),
                         };
-        public void SetDistances(List<Node> nodes){
-            Distances = new List<NodeDistance>();
-            foreach (var node in 
-                nodes.Where(n => n.Time == this.Time && n.NodeId != this.NodeId && n.Time != -1))
-            {
-                Distances.Add(NodeDistance.CalculateDistance(this, node));
-            }
-        }
     }
 }
 
