@@ -53,6 +53,7 @@
                                 new Message(node.NodeId, nis, sn.SybilNodeId)
                         )));
                     }
+                    /// 5b. Broadcast a msg to all your neighbors about that node
                     if (node.Blacklisted.Any())
                     {
                         messages.AddRange(node.NodesInSight.SelectMany(nis =>
@@ -96,25 +97,34 @@
                         if (node.NodesInSight.Any(nis => nis == msg.FromNodeId)
                             && node.Signatures.Any(s => s.NodeId == msg.FromNodeId))
                         {
-                            if (node.Suspects.Any(s => s.NodeId == msg.AccusedNode))
+                            if (node.Suspects.Any(s => s.NodeId == msg.AccusedNode && s.SuspectedByNodeId == msg.FromNodeId))
                             {
                                 node.Suspects.SingleOrDefault(s => s.NodeId == msg.AccusedNode).Expires = t + AccusationLife;
                             }
                             else
                             {
-                                node.Suspects.Add(new Suspected(msg.AccusedNode, t + AccusationLife));
+                                node.Suspects.Add(new Suspected(msg.AccusedNode, t + AccusationLife, msg.FromNodeId));
                             }
                         }
                         
                     }
                 }
                 
-                //TODO: Reloop over nodes at this time and check there messages
-                //TODO: Save record of msgs for suspects because we need to track sources
-                
                 /// 5. If there is a msg verified about a node you previously heard about:
                 /// 5a. Add that node to your blacklist
-                /// 5b. Broadcast a msg to all your neighbors about that node
+                foreach (var node in nodes.Where(n => n.Time == t))
+                {
+                    if (node.Suspects.GroupBy(s => s.NodeId).Any(g => g.Count() > 1))
+                    {
+                        node.Blacklisted.AddRange(
+                            node.Suspects
+                                .GroupBy(s => s.NodeId)
+                                .Where(g => g.Count() > 1)
+                                .Select(g => g.Key));
+                        node.Blacklisted = node.Blacklisted.Distinct().ToList();
+                    }
+                }
+                
                 Previous = t;
             }
             Console.WriteLine("Finished!" + distances.MinBy(d => d.DistanceToNode).DistanceToNode.ToString());
