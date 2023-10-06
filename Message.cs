@@ -20,6 +20,7 @@ namespace Parser{
             this.ToNodeId = toNodeId;
             this.FromNodeId = fromNodeId;
             this.AccusedNode = accusedNodeId;
+            this.Type = MessageType.Accusation;
         }
 
         public int FromNodeId { get; set; }

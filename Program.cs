@@ -18,6 +18,7 @@
 
             Console.WriteLine("We did it, we loaded the whole simulation into memory!!");
 
+            var sybilNodes = SybilSeedFactory.CreateSybilSeedData();
             double maxTime = nodes.MaxBy(n => n.Time).Time;
             double Previous = -1;
             for (double t = 0.0; t <= maxTime; t += 0.1)
@@ -41,6 +42,24 @@
                     messages.AddRange(node.NodesInSight.Select(nis => 
                         new Message(node.NodeId, nis)
                     ));
+
+                    /// 3. If you know of any Sybil (or other malicious) nodes:
+                    /// 3a. Broadcast a msg to all your neighbors about the node
+                    /// TODO: Add sending messages less often
+                    if (sybilNodes.Any(sn => sn.KnowingNodeId == node.NodeId))
+                    {
+                        messages.AddRange(node.NodesInSight.SelectMany(nis =>
+                            sybilNodes.Where(sn => sn.KnowingNodeId == node.NodeId).Select(sn =>
+                                new Message(node.NodeId, nis, sn.SybilNodeId)
+                        )));
+                    }
+                    if (node.Blacklisted.Any())
+                    {
+                        messages.AddRange(node.NodesInSight.SelectMany(nis =>
+                            node.Blacklisted.Select(bl =>
+                                new Message(node.NodeId, nis, bl)
+                        )));
+                    }
                 }
                 
                 foreach(var msg in messages)
@@ -62,16 +81,37 @@
                         {
                             node.Signatures.Add(new Signature(msg.FromNodeId, t + SignatureLife));
                         }
+                    }
+                    else if(msg.Type == MessageType.Accusation)
+                    {
+                        /// 4. If you recieve any msgs about malicious nodes:
+                        /// 4a. Verify if you can see the vehicle that sent the msg
+                        /// 4b. Verify the msg is signed by a node you know
+                        /// 4c. Keep the msg for 50 timestamp values
+                        var node = nodes.SingleOrDefault(n => n.NodeId == msg.ToNodeId && n.Time == t);
+                        node.Suspects.AddRange(nodes.SingleOrDefault(
+                            n => n.NodeId == msg.ToNodeId && n.Time == Previous).Suspects);
+                        node.Suspects.RemoveAll(s => s.Expires < t);
+                        /// TODO: Allow msgs to be signed by nodes other than those who sent
+                        if (node.NodesInSight.Any(nis => nis == msg.FromNodeId)
+                            && node.Signatures.Any(s => s.NodeId == msg.FromNodeId))
+                        {
+                            if (node.Suspects.Any(s => s.NodeId == msg.AccusedNode))
+                            {
+                                node.Suspects.SingleOrDefault(s => s.NodeId == msg.AccusedNode).Expires = t + AccusationLife;
+                            }
+                            else
+                            {
+                                node.Suspects.Add(new Suspected(msg.AccusedNode, t + AccusationLife));
+                            }
+                        }
                         
                     }
                 }
                 
-                /// 3. If you know of any Sybil (or other malicious) nodes:
-                /// 3a. Broadcast a msg to all your neighbors about the node
-                /// 4. If you recieve any msgs about malicious nodes:
-                /// 4a. Verify if you can see the vehicle that sent the msg
-                /// 4b. Verify the msg is signed by a node you know
-                /// 4c. Keep the msg for 50 timestamp values
+                //TODO: Reloop over nodes at this time and check there messages
+                //TODO: Save record of msgs for suspects because we need to track sources
+                
                 /// 5. If there is a msg verified about a node you previously heard about:
                 /// 5a. Add that node to your blacklist
                 /// 5b. Broadcast a msg to all your neighbors about that node

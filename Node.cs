@@ -6,8 +6,10 @@ namespace Parser
         public double Time { get; set; }
         public Point? Position{get;set;}
         public bool Start { get; set; }
-        public List<Signature> Signatures { get; set; }
-        public List<int> NodesInSight { get; set; }
+        public List<Signature> Signatures { get; set; } = new List<Signature>();
+        public List<int> Blacklisted { get; set; } = new List<int>();
+        public List<Suspected> Suspects { get; set; } = new List<Suspected>();
+        public List<int> NodesInSight { get; set; } = new List<int>();
         
         public static Node GetNode(string[] line, List<Node> nodes) =>
                         line switch
