@@ -16,13 +16,14 @@
 
             CalculateDistances();
 
-            Console.WriteLine("We did it, we loaded the whole simulation into memory!!");
+            Console.WriteLine("Loaded the whole simulation into memory!");
 
             var sybilNodes = SybilSeedFactory.CreateSybilSeedData();
             double maxTime = nodes.MaxBy(n => n.Time).Time;
             double Previous = -1;
             for (double t = 0.0; t <= maxTime; t += 0.1)
             {
+                Console.WriteLine("Starting time: " + t);
                 List<Message> messages = new List<Message>();
                 /// At each timestamp foreach node do the following:
                 foreach (var node in nodes.Where(n => n.Time == t))
@@ -58,7 +59,7 @@
                     {
                         messages.AddRange(node.NodesInSight.SelectMany(nis =>
                             node.Blacklisted.Select(bl =>
-                                new Message(node.NodeId, nis, bl)
+                                new Message(node.NodeId, nis, bl.NodeId, bl.SignedNodes)
                         )));
                     }
                 }
@@ -71,7 +72,7 @@
                         var node = nodes.SingleOrDefault(n => n.NodeId == msg.ToNodeId && n.Time == t);
                         
                         node.Signatures.AddRange(nodes.SingleOrDefault(
-                            n => n.NodeId == msg.ToNodeId && n.Time == Previous).Signatures);
+                            n => n.NodeId == msg.ToNodeId && n.Time == Previous)?.Signatures ?? new List<Signature>());
                         node.Signatures.RemoveAll(s => s.Expires < t);
                         
                         if (node.Signatures.Any(s => s.NodeId == msg.FromNodeId))
@@ -91,7 +92,7 @@
                         /// 4c. Keep the msg for 50 timestamp values
                         var node = nodes.SingleOrDefault(n => n.NodeId == msg.ToNodeId && n.Time == t);
                         node.Suspects.AddRange(nodes.SingleOrDefault(
-                            n => n.NodeId == msg.ToNodeId && n.Time == Previous).Suspects);
+                            n => n.NodeId == msg.ToNodeId && n.Time == Previous)?.Suspects ?? new List<Suspected>());
                         node.Suspects.RemoveAll(s => s.Expires < t);
                         /// TODO: Allow msgs to be signed by nodes other than those who sent
                         if (node.NodesInSight.Any(nis => nis == msg.FromNodeId)
@@ -103,7 +104,7 @@
                             }
                             else
                             {
-                                node.Suspects.Add(new Suspected(msg.AccusedNode, t + AccusationLife, msg.FromNodeId));
+                                node.Suspects.Add(new Suspected(msg.AccusedNode, t + AccusationLife, msg.FromNodeId, msg.NodesSigned));
                             }
                         }
                         
@@ -116,18 +117,30 @@
                 {
                     if (node.Suspects.GroupBy(s => s.NodeId).Any(g => g.Count() > 1))
                     {
-                        node.Blacklisted.AddRange(
-                            node.Suspects
-                                .GroupBy(s => s.NodeId)
-                                .Where(g => g.Count() > 1)
-                                .Select(g => g.Key));
+                        var susList = node.Suspects.GroupBy(s => s.NodeId).Where(g => g.Count() > 1).Select(g => g.Key);
+                        foreach(var susId in susList){
+                            var signed = 
+                            node.Suspects.Where(s=>s.NodeId==susId).SelectMany(sl=>sl.SignedNodes).Union(
+                            node.Suspects.Where(s=>s.NodeId==susId).Select(sl=>sl.SuspectedByNodeId)).ToList();
+                            node.Blacklisted.Add(new Blacklisted(susId, signed));
+                        } 
+                        //var sus = node.Suspects.GroupBy(s => s.NodeId).Where(g => g.Count() > 1).SelectMany(s=>s.ToList());
+                        //node.Blacklisted.AddRange(
+                        //    node.Suspects
+                        //        .GroupBy(s => s.NodeId)
+                        //        .Where(g => g.Count() > 1)
+                        //        .Select(g => new Blacklisted(g.Key, new List<int>(){node.NodeId})));
                         node.Blacklisted = node.Blacklisted.Distinct().ToList();
                     }
                 }
                 
                 Previous = t;
             }
+            
             Console.WriteLine("Finished!" + distances.MinBy(d => d.DistanceToNode).DistanceToNode.ToString());
+            
+            // TODO: find max nodeid and for loop over node ids
+            // TODO: find max time for each node ID and add to list to print out some info
             /// -----------------------------------------------------------------------
             /// -----------------------------------------------------------------------
             /// Algorithm to verify msgs
