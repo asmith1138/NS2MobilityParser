@@ -54,7 +54,10 @@
                                 new Message(node.NodeId, nis, sn.SybilNodeId)
                         )));
                     }
-                    /// 5b. Broadcast a msg to all your neighbors about that node
+                    /// 5b. Broadcast a msg to all your neighbors about that node                        
+                    node.Blacklisted.AddRange(nodes.SingleOrDefault(
+                        n => n.NodeId == node.NodeId && n.Time == Previous)?.Blacklisted ?? new List<Blacklisted>());
+                        
                     if (node.Blacklisted.Any())
                     {
                         messages.AddRange(node.NodesInSight.SelectMany(nis =>
@@ -100,7 +103,7 @@
                         {
                             if (node.Suspects.Any(s => s.NodeId == msg.AccusedNode && s.SuspectedByNodeId == msg.FromNodeId))
                             {
-                                node.Suspects.SingleOrDefault(s => s.NodeId == msg.AccusedNode).Expires = t + AccusationLife;
+                                node.Suspects.SingleOrDefault(s => s.NodeId == msg.AccusedNode && s.SuspectedByNodeId == msg.FromNodeId).Expires = t + AccusationLife;
                             }
                             else
                             {
@@ -139,8 +142,26 @@
             
             Console.WriteLine("Finished!" + distances.MinBy(d => d.DistanceToNode).DistanceToNode.ToString());
             
-            // TODO: find max nodeid and for loop over node ids
-            // TODO: find max time for each node ID and add to list to print out some info
+            // find max nodeid and for loop over node ids
+            int maxNode = nodes.MaxBy(n=>n.NodeId).NodeId;
+            // find max time for each node ID and add to list to print out some info
+            for (int n = 0; n <= maxNode; n++)
+            {
+                var node = nodes.Where(nd => nd.NodeId == n).MaxBy(nd => nd.Time);
+                Console.WriteLine("Node: " + node.NodeId);
+                Console.WriteLine("BlackList: ");
+                foreach(var blItem in node.Blacklisted){
+                    Console.WriteLine(blItem.NodeId + ", Signatures:");
+                    foreach(var sig in blItem.SignedNodes){
+                        Console.WriteLine(sig);
+                    }
+                    Console.WriteLine("End of Signatures.");
+                }
+                Console.WriteLine("End of Blacklist.");
+                Console.WriteLine("End of Node.");
+            }
+            var blNode = nodes.MaxBy(n=>n.Blacklisted.Count());
+            Console.WriteLine("Largest Blacklist: " + blNode.NodeId + ", Size: " + blNode.Blacklisted.Count());
             /// -----------------------------------------------------------------------
             /// -----------------------------------------------------------------------
             /// Algorithm to verify msgs
