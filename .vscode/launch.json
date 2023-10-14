@@ -11,7 +11,7 @@
             "preLaunchTask": "build",
             // If you have changed target frameworks, make sure to update the program path.
             "program": "${workspaceFolder}/bin/Debug/net7.0/Parser.dll",
-            "args": ["simple.ns2mobility.tcl","C:\\Users\\asmit\\Documents\\MastersLocal\\81-100.ns2mobility2.tcl"],
+            "args": ["C:\\Users\\asmit\\Documents\\MastersLocal\\simple.ns2mobility2.tcl","C:\\Users\\asmit\\Documents\\MastersLocal\\81-100.ns2mobility2.tcl"],
             "cwd": "${workspaceFolder}",
             // For more information about the 'console' field, see https://aka.ms/VSCode-CS-LaunchJson-Console
             "console": "internalConsole",

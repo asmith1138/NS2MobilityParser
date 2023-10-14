@@ -18,11 +18,19 @@
 
             Console.WriteLine("Loaded the whole simulation into memory!");
 
+            /// Set up seed sybil detection
             var sybilNodes = SybilSeedFactory.CreateSybilSeedData();
+            foreach(var sn in sybilNodes)
+            {
+                var node = nodes.Where(n => n.NodeId == sn.KnowingNodeId && n.Time != -1).MinBy(n => n.Time);
+                node.Blacklisted.Add(new Blacklisted(sn.SybilNodeId, new List<int>()));
+            }
+
             double maxTime = nodes.MaxBy(n => n.Time).Time;
             double Previous = -1;
             for (double t = 0.0; t <= maxTime; t += 0.1)
             {
+                t = Math.Round(t, 1, MidpointRounding.AwayFromZero);
                 Console.WriteLine("Starting time: " + t);
                 List<Message> messages = new List<Message>();
                 /// At each timestamp foreach node do the following:
@@ -47,14 +55,16 @@
                     /// 3. If you know of any Sybil (or other malicious) nodes:
                     /// 3a. Broadcast a msg to all your neighbors about the node
                     /// TODO: Add sending messages less often
-                    if (sybilNodes.Any(sn => sn.KnowingNodeId == node.NodeId))
+                    /*if (sybilNodes.Any(sn => sn.KnowingNodeId == node.NodeId))
                     {
                         messages.AddRange(node.NodesInSight.SelectMany(nis =>
                             sybilNodes.Where(sn => sn.KnowingNodeId == node.NodeId).Select(sn =>
                                 new Message(node.NodeId, nis, sn.SybilNodeId)
                         )));
-                    }
+                    }*/
                     /// 5b. Broadcast a msg to all your neighbors about that node                        
+                    var oldNode = nodes.SingleOrDefault(
+                        n => n.NodeId == node.NodeId && n.Time == Previous);
                     node.Blacklisted.AddRange(nodes.SingleOrDefault(
                         n => n.NodeId == node.NodeId && n.Time == Previous)?.Blacklisted ?? new List<Blacklisted>());
                         
@@ -73,11 +83,14 @@
                     {
                         /// 2b. Save signatures for 50 timestamps
                         var node = nodes.SingleOrDefault(n => n.NodeId == msg.ToNodeId && n.Time == t);
-                        
-                        node.Signatures.AddRange(nodes.SingleOrDefault(
-                            n => n.NodeId == msg.ToNodeId && n.Time == Previous)?.Signatures ?? new List<Signature>());
-                        node.Signatures.RemoveAll(s => s.Expires < t);
-                        
+
+                        if (node.Signatures != null && node.Signatures.Count() == 0)
+                        {
+                            node.Signatures.AddRange(nodes.SingleOrDefault(
+                                n => n.NodeId == msg.ToNodeId && n.Time == Previous)?.Signatures ?? new List<Signature>());
+                            node.Signatures.RemoveAll(s => s.Expires < t);
+                        }
+
                         if (node.Signatures.Any(s => s.NodeId == msg.FromNodeId))
                         {
                             node.Signatures.SingleOrDefault(s => s.NodeId == msg.FromNodeId).Expires = t + SignatureLife;
@@ -94,10 +107,15 @@
                         /// 4b. Verify the msg is signed by a node you know
                         /// 4c. Keep the msg for 50 timestamp values
                         var node = nodes.SingleOrDefault(n => n.NodeId == msg.ToNodeId && n.Time == t);
-                        node.Suspects.AddRange(nodes.SingleOrDefault(
-                            n => n.NodeId == msg.ToNodeId && n.Time == Previous)?.Suspects ?? new List<Suspected>());
-                        node.Suspects.RemoveAll(s => s.Expires < t);
-                        /// TODO: Allow msgs to be signed by nodes other than those who sent
+                        if (node.Suspects != null && node.Suspects.Count() == 0)
+                        {
+                            node.Suspects.AddRange(nodes.SingleOrDefault(
+                                                        n => n.NodeId == msg.ToNodeId && n.Time == Previous)?.Suspects ?? new List<Suspected>());
+                            node.Suspects.RemoveAll(s => s.Expires < t);
+                        }
+                        //remove suspects that are blacklisted
+                        node.Suspects.RemoveAll(s => node.Blacklisted.Any(bl => bl.NodeId == s.NodeId));
+                        /// Allow msgs to be signed by nodes other than those who sent
                         if (node.NodesInSight.Any(nis => nis == msg.FromNodeId)
                             && node.Signatures.Any(s => s.NodeId == msg.FromNodeId))
                         {
@@ -105,7 +123,7 @@
                             {
                                 node.Suspects.SingleOrDefault(s => s.NodeId == msg.AccusedNode && s.SuspectedByNodeId == msg.FromNodeId).Expires = t + AccusationLife;
                             }
-                            else
+                            else if (!node.Blacklisted.Any(bl => bl.NodeId == msg.AccusedNode))
                             {
                                 node.Suspects.Add(new Suspected(msg.AccusedNode, t + AccusationLife, msg.FromNodeId, msg.NodesSigned));
                             }
@@ -122,9 +140,9 @@
                     {
                         var susList = node.Suspects.GroupBy(s => s.NodeId).Where(g => g.Count() > 1).Select(g => g.Key);
                         foreach(var susId in susList){
-                            var signed = 
-                            node.Suspects.Where(s=>s.NodeId==susId).SelectMany(sl=>sl.SignedNodes).Union(
-                            node.Suspects.Where(s=>s.NodeId==susId).Select(sl=>sl.SuspectedByNodeId)).ToList();
+                            var signed =
+                            node.Suspects.Where(s => s.NodeId == susId).SelectMany(sl => sl.SignedNodes).Union(
+                            node.Suspects.Where(s => s.NodeId == susId).Select(sl => sl.SuspectedByNodeId)).ToList();
                             node.Blacklisted.Add(new Blacklisted(susId, signed));
                         } 
                         //var sus = node.Suspects.GroupBy(s => s.NodeId).Where(g => g.Count() > 1).SelectMany(s=>s.ToList());
@@ -153,7 +171,7 @@
                 foreach(var blItem in node.Blacklisted){
                     Console.WriteLine(blItem.NodeId + ", Signatures:");
                     foreach(var sig in blItem.SignedNodes){
-                        Console.WriteLine(sig);
+                        Console.Write(sig + ", ");
                     }
                     Console.WriteLine("End of Signatures.");
                 }
@@ -161,7 +179,10 @@
                 Console.WriteLine("End of Node.");
             }
             var blNode = nodes.MaxBy(n=>n.Blacklisted.Count());
-            Console.WriteLine("Largest Blacklist: " + blNode.NodeId + ", Size: " + blNode.Blacklisted.Count());
+            Console.WriteLine("Largest Blacklist: " + blNode.NodeId 
+            + ", Size: " + blNode.Blacklisted.Count() 
+            + ", Time: " + blNode.Time);
+            Console.WriteLine(string.Join(", ", blNode.Blacklisted.Select(bl=>bl.NodeId)));
             /// -----------------------------------------------------------------------
             /// -----------------------------------------------------------------------
             /// Algorithm to verify msgs
