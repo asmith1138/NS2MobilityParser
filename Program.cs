@@ -12,20 +12,35 @@
 
         static void Main(string[] args)
         {
+            Console.WriteLine("Parsing trace file...");
             ParseFile(args);
+            Console.WriteLine("Parsing finished.");
 
-            CalculateDistances();
+            Console.WriteLine("Calculating distances...");
+            CalculateDistances(args);
+            Console.WriteLine("Calculating finished.");
+
+            Console.WriteLine("Writing distances to file...");
+            PrintDistances(args);
+            Console.WriteLine("Distances written.");
 
             Console.WriteLine("Loaded the whole simulation into memory!");
+            
+            Console.WriteLine("Seeding sybil node information...");
+            SybilSeeding();
+            Console.WriteLine("Seeding finished.");
+            
+            Console.WriteLine("Simulating...");
+            Simulation();
+            Console.WriteLine("Simulating finished.");
 
-            /// Set up seed sybil detection
-            var sybilNodes = SybilSeedFactory.CreateSybilSeedData();
-            foreach(var sn in sybilNodes)
-            {
-                var node = nodes.Where(n => n.NodeId == sn.KnowingNodeId && n.Time != -1).MinBy(n => n.Time);
-                node.Blacklisted.Add(new Blacklisted(sn.SybilNodeId, new List<int>()));
-            }
+            Console.WriteLine("Final report:");
+            FinalReporting();
+            Console.WriteLine("End.");
+        }
 
+        private static void Simulation()
+        {
             double maxTime = nodes.MaxBy(n => n.Time).Time;
             double Previous = -1;
             for (double t = 0.0; t <= maxTime; t += 0.1)
@@ -48,7 +63,7 @@
                         .Select(d => d.DestinationNodeId).ToList()
                     ).ToList();
                     /// 2. Trade signatures with each vehicle you can physically see
-                    messages.AddRange(node.NodesInSight.Select(nis => 
+                    messages.AddRange(node.NodesInSight.Select(nis =>
                         new Message(node.NodeId, nis)
                     ));
 
@@ -67,7 +82,7 @@
                         n => n.NodeId == node.NodeId && n.Time == Previous);
                     node.Blacklisted.AddRange(nodes.SingleOrDefault(
                         n => n.NodeId == node.NodeId && n.Time == Previous)?.Blacklisted ?? new List<Blacklisted>());
-                        
+
                     if (node.Blacklisted.Any())
                     {
                         messages.AddRange(node.NodesInSight.SelectMany(nis =>
@@ -76,10 +91,10 @@
                         )));
                     }
                 }
-                
-                foreach(var msg in messages)
+
+                foreach (var msg in messages)
                 {
-                    if(msg.Type == MessageType.Signature)
+                    if (msg.Type == MessageType.Signature)
                     {
                         /// 2b. Save signatures for 50 timestamps
                         var node = nodes.SingleOrDefault(n => n.NodeId == msg.ToNodeId && n.Time == t);
@@ -100,7 +115,7 @@
                             node.Signatures.Add(new Signature(msg.FromNodeId, t + SignatureLife));
                         }
                     }
-                    else if(msg.Type == MessageType.Accusation)
+                    else if (msg.Type == MessageType.Accusation)
                     {
                         /// 4. If you recieve any msgs about malicious nodes:
                         /// 4a. Verify if you can see the vehicle that sent the msg
@@ -125,13 +140,16 @@
                             }
                             else if (!node.Blacklisted.Any(bl => bl.NodeId == msg.AccusedNode))
                             {
+                                Console.WriteLine("Adding suspect: " + msg.AccusedNode
+                                    + ", by " + msg.FromNodeId + " and signed by " + string.Join(",",msg.NodesSigned)
+                                     + " to node: " + node.NodeId + " at time " + t);
                                 node.Suspects.Add(new Suspected(msg.AccusedNode, t + AccusationLife, msg.FromNodeId, msg.NodesSigned));
                             }
                         }
-                        
+
                     }
                 }
-                
+
                 /// 5. If there is a msg verified about a node you previously heard about:
                 /// 5a. Add that node to your blacklist
                 foreach (var node in nodes.Where(n => n.Time == t))
@@ -139,12 +157,16 @@
                     if (node.Suspects.GroupBy(s => s.NodeId).Any(g => g.Count() > 1))
                     {
                         var susList = node.Suspects.GroupBy(s => s.NodeId).Where(g => g.Count() > 1).Select(g => g.Key);
-                        foreach(var susId in susList){
+                        foreach (var susId in susList)
+                        {
                             var signed =
                             node.Suspects.Where(s => s.NodeId == susId).SelectMany(sl => sl.SignedNodes).Union(
                             node.Suspects.Where(s => s.NodeId == susId).Select(sl => sl.SuspectedByNodeId)).ToList();
                             node.Blacklisted.Add(new Blacklisted(susId, signed));
-                        } 
+                            Console.WriteLine("Adding Blacklist: " + susId
+                                    + ", signed by " + string.Join(",",signed)
+                                     + " to node: " + node.NodeId + " at time " + t);
+                        }
                         //var sus = node.Suspects.GroupBy(s => s.NodeId).Where(g => g.Count() > 1).SelectMany(s=>s.ToList());
                         //node.Blacklisted.AddRange(
                         //    node.Suspects
@@ -154,23 +176,42 @@
                         node.Blacklisted = node.Blacklisted.Distinct().ToList();
                     }
                 }
-                
+
                 Previous = t;
             }
-            
+        }
+
+        private static void SybilSeeding()
+        {
+            /// Set up seed sybil detection
+            var sybilNodes = SybilSeedFactory.CreateSybilSeedData();
+            foreach (var sn in sybilNodes)
+            {
+                var node = nodes.Where(n => n.NodeId == sn.KnowingNodeId && n.Time != -1).MinBy(n => n.Time);
+                node.Blacklisted.Add(new Blacklisted(sn.SybilNodeId, new List<int>()));
+                Console.WriteLine("Initial Blacklist: " + sn.SybilNodeId
+                                    + ", no signatures"
+                                     + " to node: " + node.NodeId);
+            }
+        }
+
+        private static void FinalReporting()
+        {
             Console.WriteLine("Finished!" + distances.MinBy(d => d.DistanceToNode).DistanceToNode.ToString());
-            
+
             // find max nodeid and for loop over node ids
-            int maxNode = nodes.MaxBy(n=>n.NodeId).NodeId;
+            int maxNode = nodes.MaxBy(n => n.NodeId).NodeId;
             // find max time for each node ID and add to list to print out some info
             for (int n = 0; n <= maxNode; n++)
             {
                 var node = nodes.Where(nd => nd.NodeId == n).MaxBy(nd => nd.Time);
                 Console.WriteLine("Node: " + node.NodeId);
                 Console.WriteLine("BlackList: ");
-                foreach(var blItem in node.Blacklisted){
+                foreach (var blItem in node.Blacklisted)
+                {
                     Console.WriteLine(blItem.NodeId + ", Signatures:");
-                    foreach(var sig in blItem.SignedNodes){
+                    foreach (var sig in blItem.SignedNodes)
+                    {
                         Console.Write(sig + ", ");
                     }
                     Console.WriteLine("End of Signatures.");
@@ -178,11 +219,11 @@
                 Console.WriteLine("End of Blacklist.");
                 Console.WriteLine("End of Node.");
             }
-            var blNode = nodes.MaxBy(n=>n.Blacklisted.Count());
-            Console.WriteLine("Largest Blacklist: " + blNode.NodeId 
-            + ", Size: " + blNode.Blacklisted.Count() 
+            var blNode = nodes.MaxBy(n => n.Blacklisted.Count());
+            Console.WriteLine("Largest Blacklist: " + blNode.NodeId
+            + ", Size: " + blNode.Blacklisted.Count()
             + ", Time: " + blNode.Time);
-            Console.WriteLine(string.Join(", ", blNode.Blacklisted.Select(bl=>bl.NodeId)));
+            Console.WriteLine(string.Join(", ", blNode.Blacklisted.Select(bl => bl.NodeId)));
             /// -----------------------------------------------------------------------
             /// -----------------------------------------------------------------------
             /// Algorithm to verify msgs
@@ -192,25 +233,54 @@
             /// 4. msgs have been recieved from multiple sources
         }
 
-        private static void CalculateDistances()
+        private static void CalculateDistances(string[] args)
         {
-            foreach (Node node in nodes)
+            string filepath = args[0] + ".dis";
+            if (File.Exists(filepath))
             {
-                foreach (var dest in
-                    nodes.Where(n => n.Time == node.Time && n.NodeId != node.NodeId && n.Time != -1))
-                    if (!distances.Any(d =>
-                        d.Time == node.Time
-                        && ((d.StartNodeId == node.NodeId && d.DestinationNodeId == dest.NodeId)
-                        || (d.StartNodeId == dest.NodeId && d.DestinationNodeId == node.NodeId))))
-                    {
+                var lines = File.ReadLines(filepath);
+                foreach (var line in lines)
+                {
+                    var lineArray = line.Split(" ");
+                    new NodeDistance(int.Parse(lineArray[1]), int.Parse(lineArray[2]), double.Parse(lineArray[3]), double.Parse(lineArray[0]));
+                }
+            }
+            else
+            {
+                foreach (Node node in nodes)
+                {
+                    foreach (var dest in
+                        nodes.Where(n => n.Time == node.Time && n.NodeId != node.NodeId && n.Time != -1))
+                        if (!distances.Any(d =>
+                            d.Time == node.Time
+                            && ((d.StartNodeId == node.NodeId && d.DestinationNodeId == dest.NodeId)
+                            || (d.StartNodeId == dest.NodeId && d.DestinationNodeId == node.NodeId))))
                         {
-                            if (!node.Position.TooFar(dest.Position))
-                                distances.Add(NodeDistance.CalculateDistance(node, dest));
+                            {
+                                if (!node.Position.TooFar(dest.Position))
+                                    distances.Add(NodeDistance.CalculateDistance(node, dest));
+                            }
                         }
-                    }
+                }
+
             }
         }
 
+        private static void PrintDistances(string[] args)
+        {
+            string filepath = args[0] + ".dis";
+            if (!File.Exists(filepath))
+            {
+                using (StreamWriter outputFile = new StreamWriter(filepath))
+                {
+                    foreach (var dist in distances)
+                        outputFile.WriteLine(dist.Time + " "
+                        + dist.StartNodeId + " "
+                        + dist.DestinationNodeId + " "
+                        + dist.DistanceToNode);
+                }
+            }
+        }
         private static void ParseFile(string[] args)
         {
             var lines = File.ReadLines(args[0]);

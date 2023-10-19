@@ -6,6 +6,7 @@ namespace Parser{
             this.ToNodeId = toNodeId;
             this.FromNodeId = fromNodeId;
             this.Type = type;
+            this.NodesSigned = new List<int>();
         }
 
         public Message(int fromNodeId, int toNodeId, MessageType type, List<int> SignedBy)
@@ -21,6 +22,7 @@ namespace Parser{
             this.ToNodeId = toNodeId;
             this.FromNodeId = fromNodeId;
             this.Type = MessageType.Signature;
+            this.NodesSigned = new List<int>();
         }
 
         public Message(int fromNodeId, int toNodeId, int accusedNodeId)
