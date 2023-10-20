@@ -1,6 +1,8 @@
 ﻿namespace Parser
 {
     using System;
+    using System.Diagnostics;
+
     public class Program
     {
         public static int LidarDist = 500;
@@ -12,31 +14,49 @@
 
         static void Main(string[] args)
         {
-            Console.WriteLine("Parsing trace file...");
+            ReportSetup(args);
+
+            Trace.WriteLine("Parsing trace file...");
             ParseFile(args);
-            Console.WriteLine("Parsing finished.");
+            Trace.WriteLine("Parsing finished.");
 
-            Console.WriteLine("Calculating distances...");
+            Trace.WriteLine("Calculating distances...");
             CalculateDistances(args);
-            Console.WriteLine("Calculating finished.");
+            Trace.WriteLine("Calculating finished.");
 
-            Console.WriteLine("Writing distances to file...");
+            Trace.WriteLine("Writing distances to file...");
             PrintDistances(args);
-            Console.WriteLine("Distances written.");
+            Trace.WriteLine("Distances written.");
 
-            Console.WriteLine("Loaded the whole simulation into memory!");
+            Trace.WriteLine("Loaded the whole simulation into memory!");
             
-            Console.WriteLine("Seeding sybil node information...");
+            Trace.WriteLine("Seeding sybil node information...");
             SybilSeeding();
-            Console.WriteLine("Seeding finished.");
+            Trace.WriteLine("Seeding finished.");
             
-            Console.WriteLine("Simulating...");
+            Trace.WriteLine("Simulating...");
             Simulation();
-            Console.WriteLine("Simulating finished.");
+            Trace.WriteLine("Simulating finished.");
 
-            Console.WriteLine("Final report:");
+            Trace.WriteLine("Final report:");
             FinalReporting();
-            Console.WriteLine("End.");
+            Trace.WriteLine("End.");
+        }
+
+        private static void ReportSetup(string[] args)
+        {
+            Trace.Listeners.Clear();
+
+            TextWriterTraceListener traceListener = new TextWriterTraceListener(args[0] + ".report.txt",AppDomain.CurrentDomain.FriendlyName);
+            traceListener.Name = "TextReporter";
+            traceListener.TraceOutputOptions = TraceOptions.None;
+
+            ConsoleTraceListener consoleTraceListener = new ConsoleTraceListener(false);
+            consoleTraceListener.TraceOutputOptions = TraceOptions.None;
+
+            Trace.Listeners.Add(traceListener);
+            Trace.Listeners.Add(consoleTraceListener);
+            Trace.AutoFlush = true;
         }
 
         private static void Simulation()
@@ -46,7 +66,10 @@
             for (double t = 0.0; t <= maxTime; t += 0.1)
             {
                 t = Math.Round(t, 1, MidpointRounding.AwayFromZero);
-                Console.WriteLine("Starting time: " + t);
+                if (t % 1 == 0)
+                {
+                    Trace.WriteLine("Starting time: " + t);
+                }
                 List<Message> messages = new List<Message>();
                 /// At each timestamp foreach node do the following:
                 foreach (var node in nodes.Where(n => n.Time == t))
@@ -62,6 +85,12 @@
                         && d.DistanceToNode < LidarDist)
                         .Select(d => d.DestinationNodeId).ToList()
                     ).ToList();
+                    if(node.NodesInSight.Count()>1)
+                    {
+                        Trace.WriteLine("Node " + node.NodeId + " sees nodes: " 
+                        + string.Join(",", node.NodesInSight) + " at time " + t);
+                    }
+                    
                     /// 2. Trade signatures with each vehicle you can physically see
                     messages.AddRange(node.NodesInSight.Select(nis =>
                         new Message(node.NodeId, nis)
@@ -140,7 +169,7 @@
                             }
                             else if (!node.Blacklisted.Any(bl => bl.NodeId == msg.AccusedNode))
                             {
-                                Console.WriteLine("Adding suspect: " + msg.AccusedNode
+                                Trace.WriteLine("Adding suspect: " + msg.AccusedNode
                                     + ", by " + msg.FromNodeId + " and signed by " + string.Join(",",msg.NodesSigned)
                                      + " to node: " + node.NodeId + " at time " + t);
                                 node.Suspects.Add(new Suspected(msg.AccusedNode, t + AccusationLife, msg.FromNodeId, msg.NodesSigned));
@@ -163,7 +192,7 @@
                             node.Suspects.Where(s => s.NodeId == susId).SelectMany(sl => sl.SignedNodes).Union(
                             node.Suspects.Where(s => s.NodeId == susId).Select(sl => sl.SuspectedByNodeId)).ToList();
                             node.Blacklisted.Add(new Blacklisted(susId, signed));
-                            Console.WriteLine("Adding Blacklist: " + susId
+                            Trace.WriteLine("Adding Blacklist: " + susId
                                     + ", signed by " + string.Join(",",signed)
                                      + " to node: " + node.NodeId + " at time " + t);
                         }
@@ -189,7 +218,7 @@
             {
                 var node = nodes.Where(n => n.NodeId == sn.KnowingNodeId && n.Time != -1).MinBy(n => n.Time);
                 node.Blacklisted.Add(new Blacklisted(sn.SybilNodeId, new List<int>()));
-                Console.WriteLine("Initial Blacklist: " + sn.SybilNodeId
+                Trace.WriteLine("Initial Blacklist: " + sn.SybilNodeId
                                     + ", no signatures"
                                      + " to node: " + node.NodeId);
             }
@@ -197,7 +226,7 @@
 
         private static void FinalReporting()
         {
-            Console.WriteLine("Finished!" + distances.MinBy(d => d.DistanceToNode).DistanceToNode.ToString());
+            Trace.WriteLine("Finished!" + distances.MinBy(d => d.DistanceToNode).DistanceToNode.ToString());
 
             // find max nodeid and for loop over node ids
             int maxNode = nodes.MaxBy(n => n.NodeId).NodeId;
@@ -205,25 +234,25 @@
             for (int n = 0; n <= maxNode; n++)
             {
                 var node = nodes.Where(nd => nd.NodeId == n).MaxBy(nd => nd.Time);
-                Console.WriteLine("Node: " + node.NodeId);
-                Console.WriteLine("BlackList: ");
+                Trace.WriteLine("Node: " + node.NodeId);
+                Trace.WriteLine("BlackList: ");
                 foreach (var blItem in node.Blacklisted)
                 {
-                    Console.WriteLine(blItem.NodeId + ", Signatures:");
+                    Trace.WriteLine(blItem.NodeId + ", Signatures:");
                     foreach (var sig in blItem.SignedNodes)
                     {
-                        Console.Write(sig + ", ");
+                        Trace.Write(sig + ", ");
                     }
-                    Console.WriteLine("End of Signatures.");
+                    Trace.WriteLine("End of Signatures.");
                 }
-                Console.WriteLine("End of Blacklist.");
-                Console.WriteLine("End of Node.");
+                Trace.WriteLine("End of Blacklist.");
+                Trace.WriteLine("End of Node.");
             }
             var blNode = nodes.MaxBy(n => n.Blacklisted.Count());
-            Console.WriteLine("Largest Blacklist: " + blNode.NodeId
+            Trace.WriteLine("Largest Blacklist: " + blNode.NodeId
             + ", Size: " + blNode.Blacklisted.Count()
             + ", Time: " + blNode.Time);
-            Console.WriteLine(string.Join(", ", blNode.Blacklisted.Select(bl => bl.NodeId)));
+            Trace.WriteLine(string.Join(", ", blNode.Blacklisted.Select(bl => bl.NodeId)));
             /// -----------------------------------------------------------------------
             /// -----------------------------------------------------------------------
             /// Algorithm to verify msgs
@@ -241,8 +270,11 @@
                 var lines = File.ReadLines(filepath);
                 foreach (var line in lines)
                 {
-                    var lineArray = line.Split(" ");
-                    new NodeDistance(int.Parse(lineArray[1]), int.Parse(lineArray[2]), double.Parse(lineArray[3]), double.Parse(lineArray[0]));
+                    if(!string.IsNullOrWhiteSpace(line))
+                    {
+                        var lineArray = line.Split(" ");
+                        distances.Add(new NodeDistance(int.Parse(lineArray[1]), int.Parse(lineArray[2]), double.Parse(lineArray[3]), double.Parse(lineArray[0])));
+                    }
                 }
             }
             else
