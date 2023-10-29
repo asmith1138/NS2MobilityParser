@@ -10,6 +10,7 @@ namespace Parser
         public List<Blacklisted> Blacklisted { get; set; } = new List<Blacklisted>();
         public List<Suspected> Suspects { get; set; } = new List<Suspected>();
         public List<int> NodesInSight { get; set; } = new List<int>();
+        public List<int> NodesInRange { get; set; } = new List<int>();
         
         public static Node GetNode(string[] line, List<Node> nodes) =>
                         line switch

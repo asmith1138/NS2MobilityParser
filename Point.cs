@@ -26,8 +26,8 @@ namespace Parser{
 
         internal bool TooFar(Point? position)
         {
-            return (Math.Abs(this.X - position.X) > Program.LidarDist)
-            || (Math.Abs(this.Y - position.Y) > Program.LidarDist);
+            return (Math.Abs(this.X - position.X) > Program.BroadcastRange)
+            || (Math.Abs(this.Y - position.Y) > Program.BroadcastRange);
         }
     }
 }
