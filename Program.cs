@@ -19,18 +19,19 @@
 
         static void Main(string[] args)
         {
-            ReportSetup(args);
+            string arg = args[0];
+            ReportSetup(arg);
 
             Trace.WriteLine("Parsing trace file...");
-            ParseFile(args);
+            ParseFile(arg);
             Trace.WriteLine("Parsing finished.");
 
             Trace.WriteLine("Calculating distances...");
-            CalculateDistances(args);
+            CalculateDistances(arg);
             Trace.WriteLine("Calculating finished.");
 
             Trace.WriteLine("Writing distances to file...");
-            PrintDistances(args);
+            PrintDistances(arg);
             Trace.WriteLine("Distances written.");
 
             Trace.WriteLine("Loaded the whole simulation into memory!");
@@ -40,19 +41,19 @@
             Trace.WriteLine("Seeding finished.");
             
             Trace.WriteLine("Simulating...");
-            Simulation();
+            (double maxTime, int totalMsg, int maxMsg, int maxMsgPerSecond) = Simulation();
             Trace.WriteLine("Simulating finished.");
 
             Trace.WriteLine("Final report:");
-            FinalReporting();
+            FinalReporting(maxTime, totalMsg, maxMsg, maxMsgPerSecond);
             Trace.WriteLine("End.");
         }
 
-        private static void ReportSetup(string[] args)
+        private static void ReportSetup(string arg)
         {
             Trace.Listeners.Clear();
 
-            TextWriterTraceListener traceListener = new TextWriterTraceListener(args[0] + ".report.txt",AppDomain.CurrentDomain.FriendlyName);
+            TextWriterTraceListener traceListener = new TextWriterTraceListener(arg + ".report.txt",AppDomain.CurrentDomain.FriendlyName);
             traceListener.Name = "TextReporter";
             traceListener.TraceOutputOptions = TraceOptions.None;
 
@@ -64,9 +65,13 @@
             Trace.AutoFlush = true;
         }
 
-        private static void Simulation()
+        private static (double, int, int, int) Simulation()
         {
             double maxTime = nodes.MaxBy(n => n.Time).Time;
+            int totalMsg = 0;
+            int maxMsg = 0;
+            int maxMsgPerSecond = 0;
+            int msgPerSecond = 0;
             double Previous = -1;
             for (double t = 0.0; t <= maxTime; t += 0.1)
             {
@@ -74,6 +79,11 @@
                 if (t % PrintMod == 0)
                 {
                     Trace.WriteLine("Starting time: " + t);
+                    Trace.WriteLine($"Total messages so far: {totalMsg}");
+                }
+                if (t % 1 == 0)
+                {
+                    msgPerSecond = 0;
                 }
                 List<Message> messages = new List<Message>();
                 /// At each timestamp foreach node do the following:
@@ -245,7 +255,12 @@
                 }
 
                 Previous = t;
+                totalMsg += messages.Count();
+                msgPerSecond += messages.Count();
+                maxMsg = maxMsg > messages.Count() ? maxMsg : messages.Count();
+                maxMsgPerSecond = maxMsgPerSecond > msgPerSecond ? maxMsgPerSecond : msgPerSecond;
             }
+            return (maxTime, totalMsg, maxMsg, maxMsgPerSecond);
         }
 
         private static void SybilSeeding()
@@ -262,7 +277,7 @@
             }
         }
 
-        private static void FinalReporting()
+        private static void FinalReporting(double maxTime, int totalMsg, int maxMsg, int maxMsgPerSecond)
         {
             Trace.WriteLine("Finished!" + distances.MinBy(d => d.DistanceToNode).DistanceToNode.ToString());
 
@@ -291,6 +306,9 @@
             + ", Size: " + blNode.Blacklisted.Count()
             + ", Time: " + blNode.Time);
             Trace.WriteLine(string.Join(", ", blNode.Blacklisted.Select(bl => bl.NodeId)));
+            Trace.WriteLine($"Total Messages: {totalMsg}, Messages per second: {totalMsg / maxTime}");
+            Trace.WriteLine($"Max number of messages sent at time t: {maxMsg}");
+            Trace.WriteLine($"Max number of messages sent in 1 second: {maxMsgPerSecond}");
             /// -----------------------------------------------------------------------
             /// -----------------------------------------------------------------------
             /// Algorithm to verify msgs
@@ -300,9 +318,9 @@
             /// 4. msgs have been recieved from multiple sources
         }
 
-        private static void CalculateDistances(string[] args)
+        private static void CalculateDistances(string arg)
         {
-            string filepath = args[0] + ".dis";
+            string filepath = arg + ".dis";
             if (File.Exists(filepath))
             {
                 var lines = File.ReadLines(filepath);
@@ -336,9 +354,9 @@
             }
         }
 
-        private static void PrintDistances(string[] args)
+        private static void PrintDistances(string arg)
         {
-            string filepath = args[0] + ".dis";
+            string filepath = arg + ".dis";
             if (!File.Exists(filepath))
             {
                 using (StreamWriter outputFile = new StreamWriter(filepath))
@@ -351,9 +369,9 @@
                 }
             }
         }
-        private static void ParseFile(string[] args)
+        private static void ParseFile(string arg)
         {
-            var lines = File.ReadLines(args[0]);
+            var lines = File.ReadLines(arg);
             foreach (var line in lines)
             {
                 var ln = line.Replace("\"", "").Replace("(", " ").Replace(")", "").Split(' ');

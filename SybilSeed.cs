@@ -25,7 +25,11 @@ namespace Parser{
                 new SybilSeed(0,11),
                 new SybilSeed(2,11),
                 new SybilSeed(12,11),
-                new SybilSeed(1,11)
+                new SybilSeed(1,11),
+                new SybilSeed(6,16),
+                new SybilSeed(3,19),
+                new SybilSeed(20,16),
+                new SybilSeed(21,19)
             };
         }
     }
