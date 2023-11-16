@@ -10,16 +10,18 @@
         public static int BroadcastRange = 500;
         public static double SignatureLife = 5;
         public static int SignatureMod = 1;
+        public static int SuspectedRequired = 2;
         public static int PrintMod = 10;
         public static int BlacklistMod = 1;
         public static int BlackListLimit = 30;
         public static double AccusationLife = 5;
+        public static int Argument = 0;
         public static List<NodeDistance> distances = new List<NodeDistance>();
         public static List<Node> nodes = new List<Node>();
 
         static void Main(string[] args)
         {
-            string arg = args[0];
+            string arg = args[Argument];
             ReportSetup(arg);
 
             Trace.WriteLine("Parsing trace file...");
@@ -231,9 +233,9 @@
                 /// 5a. Add that node to your blacklist
                 foreach (var node in nodes.Where(n => n.Time == t))
                 {
-                    if (node.Suspects.GroupBy(s => s.NodeId).Any(g => g.Count() > 1))
+                    if (node.Suspects.GroupBy(s => s.NodeId).Any(g => g.Count() >= SuspectedRequired))
                     {
-                        var susList = node.Suspects.GroupBy(s => s.NodeId).Where(g => g.Count() > 1).Select(g => g.Key);
+                        var susList = node.Suspects.GroupBy(s => s.NodeId).Where(g => g.Count() >= SuspectedRequired).Select(g => g.Key);
                         foreach (var susId in susList)
                         {
                             var signed =
@@ -283,6 +285,11 @@
 
             // find max nodeid and for loop over node ids
             int maxNode = nodes.MaxBy(n => n.NodeId).NodeId;
+
+            var sybilSeeds = SybilSeedFactory.CreateSybilSeedData();
+            //var sybilNodes = sybilSeeds.Select(s => s.SybilNodeId).Distinct().Select(s => new SybilCount(s, 0));
+            var sybilNodes = SybilSeedFactory.CreateSybilCount();
+
             // find max time for each node ID and add to list to print out some info
             for (int n = 0; n <= maxNode; n++)
             {
@@ -291,6 +298,10 @@
                 Trace.WriteLine("BlackList: ");
                 foreach (var blItem in node.Blacklisted)
                 {
+                    if (sybilNodes.Any(sn => sn.Node == blItem.NodeId))
+                    {
+                        sybilNodes.SingleOrDefault(sn => sn.Node == blItem.NodeId).Increment();
+                    }
                     Trace.WriteLine(blItem.NodeId + ", Signatures:");
                     foreach (var sig in blItem.SignedNodes)
                     {
@@ -309,6 +320,11 @@
             Trace.WriteLine($"Total Messages: {totalMsg}, Messages per second: {totalMsg / maxTime}");
             Trace.WriteLine($"Max number of messages sent at time t: {maxMsg}");
             Trace.WriteLine($"Max number of messages sent in 1 second: {maxMsgPerSecond}");
+
+            foreach(var sybil in sybilNodes)
+            {
+                Trace.WriteLine($"Sybil Node {sybil.Node} starts with {sybilSeeds.Count(ss => ss.SybilNodeId == sybil.Node)} nodes knowing about it and ends with {sybil.Count} nodes knowing about it.");
+            }
             /// -----------------------------------------------------------------------
             /// -----------------------------------------------------------------------
             /// Algorithm to verify msgs
@@ -341,7 +357,8 @@
                         nodes.Where(n => n.Time == node.Time && n.NodeId != node.NodeId && n.Time != -1))
                         if (!distances.Any(d =>
                             d.Time == node.Time
-                            && ((d.StartNodeId == node.NodeId && d.DestinationNodeId == dest.NodeId)
+                            && ((d.StartNodeId == node.NodeId
+                             && d.DestinationNodeId == dest.NodeId)
                             || (d.StartNodeId == dest.NodeId && d.DestinationNodeId == node.NodeId))))
                         {
                             {

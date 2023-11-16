@@ -20,16 +20,24 @@ namespace Parser{
                 new SybilSeed(2,5),
                 new SybilSeed(7,5),
                 new SybilSeed(13,5),
-                new SybilSeed(15,5),
+                new SybilSeed(17,5),
                 new SybilSeed(23,5),
-                new SybilSeed(0,11),
-                new SybilSeed(2,11),
-                new SybilSeed(12,11),
-                new SybilSeed(1,11),
+                new SybilSeed(0,15),
+                new SybilSeed(2,15),
+                new SybilSeed(12,15),
+                new SybilSeed(1,15),
                 new SybilSeed(6,16),
                 new SybilSeed(3,19),
                 new SybilSeed(20,16),
                 new SybilSeed(21,19)
+            };
+        }
+        public static List<SybilCount> CreateSybilCount(){
+            return new List<SybilCount>{
+                new SybilCount(5,0),
+                new SybilCount(15,0),
+                new SybilCount(16,0),
+                new SybilCount(19,0)
             };
         }
     }
