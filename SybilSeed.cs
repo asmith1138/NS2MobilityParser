@@ -21,15 +21,15 @@ namespace Parser{
                 new SybilSeed(7,5),
                 new SybilSeed(13,5),
                 new SybilSeed(17,5),
-                new SybilSeed(23,5),
+                new SybilSeed(18,5),
                 new SybilSeed(0,15),
                 new SybilSeed(2,15),
                 new SybilSeed(12,15),
                 new SybilSeed(1,15),
                 new SybilSeed(6,16),
                 new SybilSeed(3,19),
-                new SybilSeed(20,16),
-                new SybilSeed(21,19)
+                new SybilSeed(14,16),
+                new SybilSeed(13,19)
             };
         }
         public static List<SybilCount> CreateSybilCount(){

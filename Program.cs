@@ -15,7 +15,7 @@
         public static int BlacklistMod = 1;
         public static int BlackListLimit = 30;
         public static double AccusationLife = 5;
-        public static int Argument = 0;
+        public static int Argument = 1;
         public static List<NodeDistance> distances = new List<NodeDistance>();
         public static List<Node> nodes = new List<Node>();
 
@@ -294,22 +294,29 @@
             for (int n = 0; n <= maxNode; n++)
             {
                 var node = nodes.Where(nd => nd.NodeId == n).MaxBy(nd => nd.Time);
+                //Trace.WriteLine("");
                 Trace.WriteLine("Node: " + node.NodeId);
                 Trace.WriteLine("BlackList: ");
                 foreach (var blItem in node.Blacklisted)
                 {
+                    //Trace.WriteLine("");
+                    var startNode = nodes.Where(nd => 
+                        nd.NodeId == n && 
+                        nd.Suspects.Any(s => s.NodeId == blItem.NodeId)).MinBy(nd => nd.Time);
                     if (sybilNodes.Any(sn => sn.Node == blItem.NodeId))
                     {
                         sybilNodes.SingleOrDefault(sn => sn.Node == blItem.NodeId).Increment();
                     }
-                    Trace.WriteLine(blItem.NodeId + ", Signatures:");
+                    string delayText = startNode != null ? (blItem.TimeBlacklisted - startNode.Time).ToString() : "Initial Value";
+                    Trace.WriteLine($"{blItem.NodeId}(At t={blItem.TimeBlacklisted}, {delayText} seconds from first suspicion), Signatures:");
+
                     foreach (var sig in blItem.SignedNodes)
                     {
                         Trace.Write(sig + ", ");
                     }
-                    Trace.WriteLine("End of Signatures.");
+                    Trace.Write("End of Signatures.");
                 }
-                Trace.WriteLine("End of Blacklist.");
+                Trace.Write("End of Blacklist.");
                 Trace.WriteLine("End of Node.");
             }
             var blNode = nodes.MaxBy(n => n.Blacklisted.Count());
