@@ -15,13 +15,22 @@
         public static int BlacklistMod = 1;
         public static int BlackListLimit = 30;
         public static double AccusationLife = 5;
-        public static int Argument = 1;
         public static List<NodeDistance> distances = new List<NodeDistance>();
         public static List<Node> nodes = new List<Node>();
 
         static void Main(string[] args)
         {
-            string arg = args[Argument];
+            // Skip argument 0
+            for(int a = args.Length - 1; a > 0; a--)
+            {
+                Cycle(args, a);
+            }
+            
+        }
+
+        private static void Cycle(string[] args, int argument)
+        {
+            string arg = args[argument];
             ReportSetup(arg);
 
             Trace.WriteLine("Parsing trace file...");
@@ -37,22 +46,26 @@
             Trace.WriteLine("Distances written.");
 
             Trace.WriteLine("Loaded the whole simulation into memory!");
-            
+
             Trace.WriteLine("Seeding sybil node information...");
-            SybilSeeding();
+            SybilSeeding(argument);
             Trace.WriteLine("Seeding finished.");
-            
+
             Trace.WriteLine("Simulating...");
             (double maxTime, int totalMsg, int maxMsg, int maxMsgPerSecond) = Simulation();
             Trace.WriteLine("Simulating finished.");
 
             Trace.WriteLine("Final report:");
-            FinalReporting(maxTime, totalMsg, maxMsg, maxMsgPerSecond);
+            FinalReporting(maxTime, totalMsg, maxMsg, maxMsgPerSecond, argument);
             Trace.WriteLine("End.");
         }
 
         private static void ReportSetup(string arg)
         {
+            if (File.Exists(arg + ".report.txt"))
+            {
+                File.Delete(arg + ".report.txt");
+            }
             Trace.Listeners.Clear();
 
             TextWriterTraceListener traceListener = new TextWriterTraceListener(arg + ".report.txt",AppDomain.CurrentDomain.FriendlyName);
@@ -241,10 +254,12 @@
                             var signed =
                             node.Suspects.Where(s => s.NodeId == susId).SelectMany(sl => sl.SignedNodes).Union(
                             node.Suspects.Where(s => s.NodeId == susId).Select(sl => sl.SuspectedByNodeId)).ToList();
-                            node.Blacklisted.Add(new Blacklisted(susId, signed, t));
-                            Trace.WriteLine("Adding Blacklist: " + susId
-                                    + ", signed by " + string.Join(",",signed)
-                                     + " to node: " + node.NodeId + " at time " + t);
+                            
+                            var nodeDistances = distances.Where(d => d.DestinationNodeId == node.NodeId && d.StartNodeId == susId && d.Time == node.Time)
+                                .Union(distances.Where(d => d.StartNodeId == node.NodeId && d.DestinationNodeId == susId && d.Time == node.Time));
+                            var distance = nodeDistances.Count() > 0 ? nodeDistances.First() : null;
+                            node.Blacklisted.Add(new Blacklisted(susId, signed, t, distance?.DistanceToNode ?? -1));
+                            Trace.WriteLine($"Adding Blacklist: {susId}, signed by {string.Join(",",signed)} to node: {node.NodeId} at time {t} at distance {distance?.DistanceToNode ?? -1}");
                         }
                         //var sus = node.Suspects.GroupBy(s => s.NodeId).Where(g => g.Count() > 1).SelectMany(s=>s.ToList());
                         //node.Blacklisted.AddRange(
@@ -265,28 +280,33 @@
             return (maxTime, totalMsg, maxMsg, maxMsgPerSecond);
         }
 
-        private static void SybilSeeding()
+        private static void SybilSeeding(int argument)
         {
             /// Set up seed sybil detection
-            var sybilNodes = SybilSeedFactory.CreateSybilSeedData();
+            var sybilNodes = SybilSeedFactory.CreateSybilSeedData(argument);
             foreach (var sn in sybilNodes)
             {
                 var node = nodes.Where(n => n.NodeId == sn.KnowingNodeId && n.Time != -1).MinBy(n => n.Time);
-                node.Blacklisted.Add(new Blacklisted(sn.SybilNodeId, new List<int>(), 0));
+                var nodeDistances = distances.Where(d => d.DestinationNodeId == node.NodeId && d.StartNodeId == sn.SybilNodeId)
+                    .Union(distances.Where(d => d.StartNodeId == node.NodeId && d.DestinationNodeId == sn.SybilNodeId))
+                    ?.OrderBy(d => d.Time);
+                var distance = nodeDistances.Count() > 0 ? nodeDistances.First() : null;
+
+                node.Blacklisted.Add(new Blacklisted(sn.SybilNodeId, new List<int>(), 0, distance?.DistanceToNode ?? -1));
                 Trace.WriteLine("Initial Blacklist: " + sn.SybilNodeId
                                     + ", no signatures"
                                      + " to node: " + node.NodeId);
             }
         }
 
-        private static void FinalReporting(double maxTime, int totalMsg, int maxMsg, int maxMsgPerSecond)
+        private static void FinalReporting(double maxTime, int totalMsg, int maxMsg, int maxMsgPerSecond, int argument)
         {
             Trace.WriteLine("Finished!" + distances.MinBy(d => d.DistanceToNode).DistanceToNode.ToString());
 
             // find max nodeid and for loop over node ids
             int maxNode = nodes.MaxBy(n => n.NodeId).NodeId;
 
-            var sybilSeeds = SybilSeedFactory.CreateSybilSeedData();
+            var sybilSeeds = SybilSeedFactory.CreateSybilSeedData(argument);
             //var sybilNodes = sybilSeeds.Select(s => s.SybilNodeId).Distinct().Select(s => new SybilCount(s, 0));
             var sybilNodes = SybilSeedFactory.CreateSybilCount();
 
@@ -308,7 +328,7 @@
                         sybilNodes.SingleOrDefault(sn => sn.Node == blItem.NodeId).Increment();
                     }
                     string delayText = startNode != null ? (blItem.TimeBlacklisted - startNode.Time).ToString() : "Initial Value";
-                    Trace.WriteLine($"{blItem.NodeId}(At t={blItem.TimeBlacklisted}, {delayText} seconds from first suspicion), Signatures:");
+                    Trace.WriteLine($"{blItem.NodeId}(At t={blItem.TimeBlacklisted}, {delayText} seconds from first suspicion), dist={blItem.DistanceAtBlacklist}, Signatures:");
 
                     foreach (var sig in blItem.SignedNodes)
                     {
